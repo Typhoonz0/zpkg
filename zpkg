@@ -1,0 +1,161 @@
+#!/usr/bin/python3
+
+import sys
+import json
+import os
+import urllib.request
+import subprocess
+import shutil
+import requests
+
+DB_URL = "https://casino-server-yswd.onrender.com/list"  
+DB_FILE = "pkgdb.json"
+PKG_DIR = "packages"
+FLASK_API_ADD = "https://casino-server-yswd.onrender.com/add"
+FLASK_API_REMOVE = "https://casino-server-yswd.onrender.com/remove"
+
+def downloadFile(url, dest):
+    print(f"Downloading {url}...")
+    urllib.request.urlretrieve(url, dest)
+    print(f"Saved to {dest}")
+
+def updateDatabase():
+    print("Fetching latest package database...")
+    try:
+        with urllib.request.urlopen(DB_URL) as response:
+            data = response.read().decode("utf-8")
+            with open(DB_FILE, "w") as f:
+                f.write(data)
+        print("Database updated.")
+    except Exception as e:
+        print(f"Failed to update database: {e}")
+        sys.exit(1)
+
+def loadDatabase():
+    if not os.path.exists(DB_FILE):
+        print("Database not found. Run `update` first.")
+        sys.exit(1)
+    with open(DB_FILE, "r") as f:
+        return json.load(f)
+
+def cloneRepo(gitUrl, destDir):
+    if os.path.exists(destDir):
+        print(f"{destDir} already exists, skipping clone.")
+        return
+    print(f"Cloning {gitUrl} into {destDir}...")
+    subprocess.run(["git", "clone", gitUrl, destDir], check=True)
+
+def installPackage(pkgName, db, installed):
+    if pkgName in installed:
+        return
+    if pkgName not in db:
+        print(f"Package '{pkgName}' not found in database.")
+        sys.exit(1)
+
+    info = db[pkgName]
+
+    for dep in info.get("deps", []):
+        installPackage(dep, db, installed)
+
+    os.makedirs(PKG_DIR, exist_ok=True)
+    destPath = os.path.join(PKG_DIR, pkgName)
+    cloneRepo(info["url"], destPath)
+
+    if info.get("pypi"):
+        print(f"Installing PyPI dependencies for {pkgName}...")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install"] + info["pypi"], check=True)
+        except:
+            print("Failed to install PyPI dependencies.")
+            sys.exit(1)
+
+    for cmd in info.get("other", []):
+        print(f"Running: {cmd}")
+        subprocess.run(cmd, shell=True, check=True)
+
+    installed.add(pkgName)
+    print(f"Installed {pkgName}")
+
+def addPackageFromManifest(path):
+    if not os.path.exists(path):
+        print(f"Manifest file {path} not found.")
+        sys.exit(1)
+
+    with open(path, "r") as f:
+        manifest = json.load(f)
+
+    if "name" not in manifest or "url" not in manifest:
+        print("Manifest must include 'name' and 'url'.")
+        sys.exit(1)
+
+    payload = {
+        "name": manifest["name"],
+        "url": manifest["url"],
+        "deps": manifest.get("zpkg", []),
+        "pypi": manifest.get("pypi", []),
+        "other": manifest.get("other", [])
+    }
+
+    try:
+        response = requests.post(FLASK_API_ADD, json=payload)
+        if response.status_code == 200:
+            print(f"Package '{manifest['name']}' added successfully.")
+        else:
+            print(f"Error adding package: {response.text}")
+    except Exception as e:
+        print(f"Failed to contact server: {e}")
+
+def removePackage(pkgName):
+    db = loadDatabase()
+    if pkgName not in db:
+        print(f"Package '{pkgName}' not found in database.")
+        sys.exit(1)
+
+    # Remove from the server database
+    try:
+        response = requests.post(FLASK_API_REMOVE, json={"name": pkgName})
+        if response.status_code == 200:
+            print(f"Package '{pkgName}' removed from database.")
+        else:
+            print(f"Error removing package: {response.text}")
+    except Exception as e:
+        print(f"Failed to contact server: {e}")
+
+    # Remove package from local file system
+    pkgPath = os.path.join(PKG_DIR, pkgName)
+    if os.path.exists(pkgPath):
+        print(f"Removing package from local filesystem: {pkgPath}")
+        shutil.rmtree(pkgPath)
+    else:
+        print(f"Package '{pkgName}' not found locally.")
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: zpkg <command> [args]")
+        return
+
+    command = sys.argv[1]
+
+    if command == "update":
+        updateDatabase()
+    elif command == "add":
+        if len(sys.argv) < 3:
+            print("Usage: zpkg add <manifest.json>")
+            return
+        addPackageFromManifest(sys.argv[2])
+    elif command == "install":
+        if len(sys.argv) < 3:
+            print("Usage: zpkg install <package>")
+            return
+        db = loadDatabase()
+        installPackage(sys.argv[2], db, set())
+    elif command == "remove":
+        if len(sys.argv) < 3:
+            print("Usage: zpkg remove <package>")
+            return
+        removePackage(sys.argv[2])
+    else:
+        print(f"Unknown command: {command}")
+
+if __name__ == "__main__":
+    main()
