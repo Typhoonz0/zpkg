@@ -20,7 +20,6 @@ def load_db():
 def save_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=2)
-    f.flush()
 
 @app.route("/add", methods=["POST"])
 def add_package():
