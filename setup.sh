@@ -6,5 +6,5 @@ fi
 if [[ "$SHELL" = "/usr/bin/zsh" ]]; then
     echo "export PATH=$PATH:$(pwd)" >> ~/.zshrc
 fi
-
+chmod +x zpkg
 echo "Done. Open a new terminal."
