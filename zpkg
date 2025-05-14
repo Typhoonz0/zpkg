@@ -14,15 +14,85 @@ import hashlib
 SCRDIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
+
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.5.4"
+VERSION = "0.5.5"
 
-RED = "\033[31m"
-BLUE = "\033[36m"
-GREEN = "\033[32m"
-RESET = "\033[0m"
+if os.name != "nt":
+    RED = "\033[31m"
+    BLUE = "\033[36m"
+    GREEN = "\033[32m"
+    RESET = "\033[0m"
+else:
+    RED, BLUE, GREEN, RESET = "", "", "", ""
+
+def ping():
+    pass
+
+def docs(topic):
+    add = fr"""[{GREEN}Adding Packages to Database{RESET}]
+Create a manifest.json file containing any of these arguments:
+(name, url, secret are compulsory)
+{{
+    "name": "package-name-use-hyphens-or-underscores",
+    "url": "git-url e.g. https://github.com/Typhoonz0/zpkg.git",
+    "deps": "zpkg dependencies space seperated",
+    "pypi": "pip dependencies space seperated",
+    "other": "runs commands in shell e.g. yay -S package or ./more.sh",
+    "secret": "Dont add spaces and keep this safe! you need it to remove your package from the database."
+}}
+Then, run:
+zpkg add manifest.json"""
+
+    remove = fr"""[{GREEN}Removing Packages from Database{RESET}]
+If you want to remove a package you installed, see uninstall.
+Find your packages name, then the secret you provided in the manifest.json file, 
+or that was provided to you in the terminal on adding. Without this secret, you cannot remove it.
+Then, run:
+zpkg remove pkg-name secret"""
+
+    update = fr"""[{GREEN}Updating Package Database{RESET}]
+If you want to update a package you installed, see upgrade.
+zpkg works by taking a database of links and manages them all under one program.
+When a new package is added to the database, users will need to update their local database to see it.
+zpkg update"""
+
+    upgrade = fr"""[{GREEN}Upgrading Packages{RESET}]
+If there are updates to a package, it will automatically download them. It will also remove everything in the directory,
+so please use another location to back up files. Otherwise, it will inform you the package is up to date.
+zpkg upgrade"""
+
+    install = fr"""[{GREEN}Installing Packages{RESET}]
+Packages will be installed wherever zpkg is installed and into the packages directory, as in:
+/home/user/zpkg/packages/package-name or 
+C:\Users\Username\zpkg\packages\package-name
+Install a package by running:
+zpkg install pkg-name
+See a list of packages by running:
+zpkg list"""
+
+    uninstall = fr"""[{GREEN}Uninstalling Packages{RESET}]
+If you want to remove a package from the database too, see remove.
+It will remove everything in the /zpkg/packages/package-name directory,
+so please use another location to back up files. 
+zpkg uninstall pkg-name"""
+
+    if topic.lower() == "add":
+        print(add)
+    elif topic.lower() == "remove":
+        print(remove) 
+    elif topic.lower() == "update":
+        print(update) 
+    elif topic.lower() == "upgrade":
+        print(upgrade) 
+    elif topic.lower() == "install":
+        print(install) 
+    elif topic.lower() == "uninstall":
+        print(uninstall) 
+    else: 
+        print(f"[{RED}error{RESET}] No doc entry for {topic} Options are add, remove, update, upgrade, install, uninstall.")
 
 def listLocal():
     for i in os.listdir(os.path.join(SCRDIR, "packages")):
@@ -49,9 +119,13 @@ def updateDatabase():
     try:
         with urllib.request.urlopen(DB_URL) as response:
             data = response.read().decode("utf-8")
-            with open(DB_FILE, "w") as f:
-                f.write(data)
-        print(f"[{GREEN}success{RESET}] Database is up to date.")
+            if data != "{}":
+                with open(DB_FILE, "w") as f:
+                    f.write(data)
+                print(f"[{GREEN}success{RESET}] Database is up to date.")
+            else:
+                print(f"[{RED}error{RESET}] The database was empty, using current database.")
+        
     except Exception as e:
         print(f"[{RED}error{RESET}] Failed to update database: {e}")
         sys.exit(1)
@@ -78,6 +152,10 @@ def installPackage(pkgName, db, installed):
         sys.exit(1)
 
     info = db[pkgName]
+    print(info)
+
+    if input("Install package? [Y/n] ").lower() not in ["", " ", "y", "yes", "nigger"]:
+        return
 
     for dep in info.get("deps", []):
         installPackage(dep, db, installed)
@@ -257,33 +335,46 @@ def whatsNew():
     print(f"""[{GREEN}Added{RESET}]:
 whats-new - Print this
 list-local - List installed packages
+docs - Added documentation for basic commands
 
 [{BLUE}Changed{RESET}]:
 upgrade - Upgrades all packages at once""")
 
+def zpkgHelp():
+    print(f"[{GREEN}zpkg{RESET}] ez package manager")
+    print("<> = example args, <a|b> one of either arg")
+    print("whats-new - Print new changes to zpkg")
+    print("docs <add|remove|update|upgrade|install|uninstall> - Print a manual of a topic")
+    print("add <manifest.json> - Add a package to the database")
+    print("remove <package> <secret> - Remove a package from the database")
+    print("list - List packages in database")
+    print("list-local - List installed packages")
+    print("update - Download the newest database")
+    print("upgrade - Download the newest version of all packages")
+    print("self-update - Download the newest version of zpkg")
+    print("install <package> - Install a package")
+    print("uninstall <package> - Remove a package")
+    print("version - Returns the version of zpkg")
+    print("help - prints this message")
+
 def main():
     if len(sys.argv) < 2:
-        print(f"[{GREEN}zpkg{RESET}] ez package manager")
-        print("<> = example mandatory args")
-        print("whats-new - Print new changes to zpkg")
-        print("add <manifest.json> - Add a package to the database")
-        print("remove <pkg> <secret> - Remove a package from the database")
-        print("list - List packages in database")
-        print("list-local - List installed packages")
-        print("update - Download the newest database")
-        print("upgrade - Download the newest version of all packages")
-        print("self-update - Download the newest version of zpkg")
-        print("install <package> - Install a package")
-        print("uninstall <package> - Remove a package")
-        print("version - Returns the version of zpkg")
+        zpkgHelp()
         sys.exit()
 
     command = sys.argv[1]
 
     if command == "update":
         updateDatabase()
+    elif command == "help": 
+        zpkgHelp()
     elif command == "version":
         print(VERSION)
+    elif command == "docs":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg docs <add|remove|update|upgrade|install|uninstall>")
+            return
+        docs(sys.argv[2])
     elif command == "list":
         listPackages()
     elif command == "whats-new":
@@ -293,6 +384,9 @@ def main():
     elif command == "list-local":
         listLocal()
     elif command == "remove":
+        if len(sys.argv) < 4:
+            print(f"[{RED}error{RESET}] Usage: zpkg remove <pkg> <secret>")
+            return
         removeRemote(sys.argv[2], sys.argv[3])
     elif command == "add":
         if len(sys.argv) < 3:
