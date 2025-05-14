@@ -12,12 +12,13 @@ import string
 import hashlib
 
 SCRDIR = os.path.dirname(os.path.abspath(__file__))
-DB_URL = "https://zpkg.fly.dev/list"  
 DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
+DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = 0.5
+VERSION = 0.5.1
+
 RED = "\033[31m"
 BLUE = "\033[36m"
 GREEN = "\033[32m"
@@ -256,10 +257,10 @@ def main():
         print(f"[{GREEN}zpkg{RESET}] ez package manager")
         print("<> = example mandatory args")
         print("add <manifest.json> - Add a package to the database")
-        print("remove <pkg> <secret> - Remove a package to the database")
+        print("remove <pkg> <secret> - Remove a package from the database")
         print("list - List packages in database")
         print("update - Download the newest database")
-        print("upgrade - Download the newest version of the package")
+        print("upgrade <pkg-name> - Download the newest version of the package")
         print("self-update - Download the newest version of zpkg")
         print("install <package> - Install a package")
         print("uninstall <package> - Remove a package")
