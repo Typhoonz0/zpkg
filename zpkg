@@ -32,7 +32,7 @@ PKG_DIR = os.path.join(SCRDIR, "packages")
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 
 def ping():
     pass
@@ -195,7 +195,7 @@ def getRepoSize(url):
         return round(resp.json().get("size", 0), 2)
     return None
 
-def installPackage(pkgName, db, installed):
+def installPackage(pkgName, db, installed, confirm):
     if pkgName in installed:
         return
     if pkgName not in db:
@@ -205,11 +205,12 @@ def installPackage(pkgName, db, installed):
     info = db[pkgName]
     print(info)
     print(f"Total download size: {getRepoSize(info["url"])} KB")
-    if input(f"Install {pkgName}? [Y/n] ").lower() not in ["", " ", "y", "yes"]:
-        sys.exit()
+    if confirm:
+        if input(f"Install {pkgName}? [Y/n] ").lower() not in ["", " ", "y", "yes"]:
+            sys.exit()
 
     for dep in info.get("deps", []):
-        installPackage(dep, db, installed)
+        installPackage(dep, db, installed, False)
 
     os.makedirs(PKG_DIR, exist_ok=True)
     destPath = os.path.join(PKG_DIR, pkgName)
@@ -257,8 +258,8 @@ def upgradePackages():
             continue
 
         print(f"[{BLUE}notice{RESET}] Upgrading {pkgName}...")
-        removePackage(pkgName)
-        installPackage(pkgName, db, set())
+        removePackage(pkgName, False)
+        installPackage(pkgName, db, set(), False)
 
 
 def generate_secret(length=16):
@@ -315,11 +316,11 @@ def getsize(path):
                 # print(fp, size)
     return total / 1000
 
-def removePackage(pkgName):
+def removePackage(pkgName, confirm):
     pkgPath = os.path.join(PKG_DIR, pkgName)
     if os.path.exists(pkgPath):
         print(f"Total installed size: {getsize(pkgPath)} KB")
-        if input(f"Uninstall {pkgName}? [y/N] ").lower() in ["y", "yes"]: 
+        if not confirm or input(f"Uninstall {pkgName}? [y/N] ").lower() in ["y", "yes"]: 
             print(f"[{BLUE}notice{RESET}] Removing package: {pkgPath}")
             shutil.rmtree(pkgPath)
             print(f"[{GREEN}success{RESET}] Removed {pkgPath}.")
@@ -440,12 +441,16 @@ def main():
             print(f"[{RED}error{RESET}] Usage: zpkg install <package>")
             return
         db = loadDatabase()
-        installPackage(sys.argv[2], db, set())
+        if "-y" in sys.argv: c = False 
+        else: c = True
+        installPackage(sys.argv[2], db, set(), c)
     elif command == "uninstall":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg uninstall <package>")
             return
-        removePackage(sys.argv[2])
+        if "-y" in sys.argv: c = False 
+        else: c = True
+        removePackage(sys.argv[2], c)
     if command == "update":
         updateDatabase()
     elif command == "upgrade":
