@@ -259,6 +259,7 @@ def main():
         print("remove <pkg> <secret> - Remove a package to the database")
         print("list - List packages in database")
         print("update - Download the newest database")
+        print("upgrade <pkg-name or all> - Download the newest version of the package")
         print("self-update - Download the newest version of zpkg")
         print("install <package> - Install a package")
         print("uninstall <package> - Remove a package")
