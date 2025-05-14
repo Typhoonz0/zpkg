@@ -17,7 +17,7 @@ DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-
+VERSION = 0.5
 RED = "\033[31m"
 BLUE = "\033[36m"
 GREEN = "\033[32m"
@@ -179,7 +179,7 @@ def removeRemote(pkgName, secret):
         print(f"[{RED}error{RESET}] Failed to contact server: {e}")
 
 def self_update():
-    SCRIPT_URL = "https://raw.githubusercontent.com/Typhoonz0/zpkg/d9030c3651973180b3d4a0c82d1b42aa333724f7/zpkg"  # Replace with your actual URL
+    SCRIPT_URL = "https://raw.githubusercontent.com/Typhoonz0/zpkg/main/zpkg"
     try:
         print(f"[{BLUE}notice{RESET}] Downloading latest version of zpkg...")
         with urllib.request.urlopen(SCRIPT_URL) as response:
@@ -209,6 +209,8 @@ def main():
 
     if command == "update":
         updateDatabase()
+    elif command == "version":
+        print(VERSION)
     elif command == "list":
         listPackages()
     elif command == "self-update":
