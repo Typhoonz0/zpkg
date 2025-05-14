@@ -6,19 +6,9 @@ import os
 import urllib.request
 import subprocess
 import shutil
-import requests
 import random
 import string
 import hashlib
-
-SCRDIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
-PKG_DIR = os.path.join(SCRDIR, "packages")
-
-DB_URL = "https://zpkg.fly.dev/list"  
-FLASK_API_ADD = "https://zpkg.fly.dev/add"
-FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.5.5"
 
 if os.name != "nt":
     RED = "\033[31m"
@@ -27,6 +17,21 @@ if os.name != "nt":
     RESET = "\033[0m"
 else:
     RED, BLUE, GREEN, RESET = "", "", "", ""
+
+try: 
+    import requests
+except ImportError: 
+    print(f"[{RED}error{RESET}] Please run pip install requests.") 
+    sys.exit()
+
+SCRDIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
+PKG_DIR = os.path.join(SCRDIR, "packages")
+
+DB_URL = "https://zpkg.fly.dev/list"  
+FLASK_API_ADD = "https://zpkg.fly.dev/add"
+FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
+VERSION = "0.6"
 
 def ping():
     pass
@@ -93,11 +98,6 @@ zpkg uninstall pkg-name"""
         print(uninstall) 
     else: 
         print(f"[{RED}error{RESET}] No doc entry for {topic} Options are add, remove, update, upgrade, install, uninstall.")
-
-def listLocal():
-    for i in os.listdir(os.path.join(SCRDIR, "packages")):
-        print(i)
-
 def listPackages():
     db = loadDatabase()
     if not db:
@@ -107,6 +107,46 @@ def listPackages():
     print(f"[{BLUE}notice{RESET}] Available packages:")
     for name, info in db.items():
         print(f"- {name}: {info.get('url', 'No URL')}")
+
+
+def queryPackage(pkg):
+    db = loadDatabase()
+    if not db or pkg not in db:
+        print(f"[{RED}error{RESET}] No packages found with the name {pkg}.")
+        return
+
+    info = db[pkg]
+    print(f"- {pkg}: {info}")
+
+
+def listLocalPackages():
+    db = loadDatabase()
+    local_path = os.path.join(SCRDIR, "packages")
+    if not os.path.exists(local_path):
+        print(f"[{RED}error{RESET}] No local packages directory found.")
+        return
+
+    found = False
+    for pkg in os.listdir(local_path):
+        if pkg in db:
+            print(f"- {pkg}")
+            found = True
+    if not found:
+        print(f"[{RED}error{RESET}] No locally installed packages matched the database.")
+
+
+def queryLocalPackage(pkg):
+    db = loadDatabase()
+    local_path = os.path.join(SCRDIR, "packages")
+    if not os.path.exists(local_path):
+        print(f"[{RED}error{RESET}] No local packages directory found.")
+        return
+
+    if pkg in os.listdir(local_path) and pkg in db:
+        info = db[pkg]
+        print(f"- {pkg}: {info}")
+    else:
+        print(f"[{RED}error{RESET}] Package {pkg} not installed or not found in database.")
 
 
 def downloadFile(url, dest):
@@ -255,7 +295,6 @@ def addPackageFromManifest(path):
         print(f"[{RED}error{RESET}] Failed to contact server: {e}")
 
 def removePackage(pkgName):
-    # Remove package from local file system
     pkgPath = os.path.join(PKG_DIR, pkgName)
     if os.path.exists(pkgPath):
         print(f"[{BLUE}notice{RESET}] Removing package from local filesystem: {pkgPath}")
@@ -336,24 +375,32 @@ def whatsNew():
 whats-new - Print this
 list-local - List installed packages
 docs - Added documentation for basic commands
+query - See package details in database
+query-local - See package details of installed packages
 
 [{BLUE}Changed{RESET}]:
 upgrade - Upgrades all packages at once""")
 
 def zpkgHelp():
     print(f"[{GREEN}zpkg{RESET}] ez package manager")
-    print("<> = example args, <a|b> one of either arg")
-    print("whats-new - Print new changes to zpkg")
-    print("docs <add|remove|update|upgrade|install|uninstall> - Print a manual of a topic")
-    print("add <manifest.json> - Add a package to the database")
-    print("remove <package> <secret> - Remove a package from the database")
-    print("list - List packages in database")
-    print("list-local - List installed packages")
-    print("update - Download the newest database")
-    print("upgrade - Download the newest version of all packages")
-    print("self-update - Download the newest version of zpkg")
+    print("<> = example args, <a|b> one of either arg\n")
+    
     print("install <package> - Install a package")
     print("uninstall <package> - Remove a package")
+    print("update - Download the newest database")
+    print("upgrade - Download the newest version of all packages")
+    print("self-update - Download the newest version of zpkg\n")
+
+    print("add <manifest.json> - Add a package to the database")
+    print("remove <package> <secret> - Remove a package from the database\n")
+
+    print("list - List packages in database")
+    print("list-local - List installed packages")
+    print("query <package> - List <package> details in database")
+    print("query-local <package> - List <package> details if installed\n")
+
+    print("whats-new - Print new changes to zpkg")
+    print("docs <add|remove|update|upgrade|install|uninstall> - Print a manual of a topic")
     print("version - Returns the version of zpkg")
     print("help - prints this message")
 
@@ -364,38 +411,7 @@ def main():
 
     command = sys.argv[1]
 
-    if command == "update":
-        updateDatabase()
-    elif command == "help": 
-        zpkgHelp()
-    elif command == "version":
-        print(VERSION)
-    elif command == "docs":
-        if len(sys.argv) < 3:
-            print(f"[{RED}error{RESET}] Usage: zpkg docs <add|remove|update|upgrade|install|uninstall>")
-            return
-        docs(sys.argv[2])
-    elif command == "list":
-        listPackages()
-    elif command == "whats-new":
-        whatsNew()
-    elif command == "self-update":
-        self_update()
-    elif command == "list-local":
-        listLocal()
-    elif command == "remove":
-        if len(sys.argv) < 4:
-            print(f"[{RED}error{RESET}] Usage: zpkg remove <pkg> <secret>")
-            return
-        removeRemote(sys.argv[2], sys.argv[3])
-    elif command == "add":
-        if len(sys.argv) < 3:
-            print(f"[{RED}error{RESET}] Usage: zpkg add <manifest.json>")
-            return
-        addPackageFromManifest(sys.argv[2])
-    elif command == "upgrade":
-        upgradePackages()
-    elif command == "install":
+    if command == "install":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg install <package>")
             return
@@ -406,8 +422,51 @@ def main():
             print(f"[{RED}error{RESET}] Usage: zpkg uninstall <package>")
             return
         removePackage(sys.argv[2])
+    if command == "update":
+        updateDatabase()
+    elif command == "upgrade":
+        upgradePackages()
+    elif command == "self-update":
+        self_update()
+
+    elif command == "add":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg add <manifest.json>")
+            return
+        addPackageFromManifest(sys.argv[2])
+    elif command == "remove":
+        if len(sys.argv) < 4:
+            print(f"[{RED}error{RESET}] Usage: zpkg remove <pkg> <secret>")
+            return
+        removeRemote(sys.argv[2], sys.argv[3])
+
+    elif command == "list":
+        listPackages()
+    elif command == "list-local":
+        listLocal()
+    elif command == "query":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg query <pkg>")
+            return
+        query(sys.argv[2])
+    elif command == "query-local":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg query-local <pkg>")
+            return
+        queryLocalPackage(sys.argv[2])
+    elif command == "whats-new":
+        whatsNew()
+    elif command == "docs":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg docs <add|remove|update|upgrade|install|uninstall>")
+            return
+        docs(sys.argv[2])
+    elif command == "version":
+        print(VERSION)
+    elif command == "help": 
+        zpkgHelp()
     else:
-        print(f"[{RED}error{RESET}] Unknown command: {command}")
+        print(f"[{RED}error{RESET}] Unknown command: {command}. Type zpkg help for a list of commands.")
 
 if __name__ == "__main__":
     main()
