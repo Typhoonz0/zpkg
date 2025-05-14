@@ -204,7 +204,7 @@ def installPackage(pkgName, db, installed, confirm):
 
     info = db[pkgName]
     print(info)
-    print(f"Total download size: {getRepoSize(info["url"])} KB")
+    print(f"Total download size: {getRepoSize(info['url'])} KB")
     if confirm:
         if input(f"Install {pkgName}? [Y/n] ").lower() not in ["", " ", "y", "yes"]:
             sys.exit()
@@ -247,7 +247,7 @@ def upgradePackages():
 
     for pkgName, info in db.items():
         current_sha = installed_commits.get(pkgName)
-        latest_sha = get_latest_commit_sha(info["url"])
+        latest_sha = get_latest_commit_sha(info['url'])
 
         if not latest_sha:
             print(f"[{RED}error{RESET}] Could not retrieve latest commit for {pkgName}.")
