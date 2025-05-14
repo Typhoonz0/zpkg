@@ -17,12 +17,16 @@ PKG_DIR = os.path.join(SCRDIR, "packages")
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 
 RED = "\033[31m"
 BLUE = "\033[36m"
 GREEN = "\033[32m"
 RESET = "\033[0m"
+
+def listLocal():
+    for i in os.listdir(os.path.join(SCRDIR, "packages")):
+        print(i)
 
 def listPackages():
     db = loadDatabase()
@@ -109,28 +113,25 @@ def installPackage(pkgName, db, installed):
     installed.add(pkgName)
     print(f"[{GREEN}success{RESET}] Installed {pkgName} at {SCRDIR}/packages/{pkgName}.")
 
-def upgradePackage(pkgName):
+def upgradePackages():
     db = loadDatabase()
-    if pkgName not in db:
-        print(f"[{RED}error{RESET}] Package '{pkgName}' not found in database.")
-        return
-
-    info = db[pkgName]
     installed_commits = load_installed_commits()
-    current_sha = installed_commits.get(pkgName)
-    latest_sha = get_latest_commit_sha(info["url"])
 
-    if not latest_sha:
-        print(f"[{RED}error{RESET}] Could not retrieve latest commit.")
-        return
+    for pkgName, info in db.items():
+        current_sha = installed_commits.get(pkgName)
+        latest_sha = get_latest_commit_sha(info["url"])
 
-    if current_sha == latest_sha:
-        print(f"[{BLUE}notice{RESET}] {pkgName} is already up to date.")
-        return
+        if not latest_sha:
+            print(f"[{RED}error{RESET}] Could not retrieve latest commit for {pkgName}.")
+            continue
 
-    print(f"[{BLUE}notice{RESET}] Upgrading {pkgName}...")
-    removePackage(pkgName)
-    installPackage(pkgName, db, set())
+        if current_sha == latest_sha:
+            print(f"[{BLUE}notice{RESET}] {pkgName} is already up to date.")
+            continue
+
+        print(f"[{BLUE}notice{RESET}] Upgrading {pkgName}...")
+        removePackage(pkgName)
+        installPackage(pkgName, db, set())
 
 
 def generate_secret(length=16):
@@ -251,16 +252,26 @@ def save_installed_commit(pkg, sha):
     with open(COMMIT_TRACKER, "w") as f:
         json.dump(commits, f)
 
+def whatsNew():
+    print(f"{GREEN}zpkg{RESET} Version", VERSION)
+    print(f"""[{GREEN}Added{RESET}]:
+whats-new - Print this
+list-local - List installed packages
+
+[{BLUE}Changed{RESET}]:
+upgrade - Upgrades all packages at once""")
 
 def main():
     if len(sys.argv) < 2:
         print(f"[{GREEN}zpkg{RESET}] ez package manager")
         print("<> = example mandatory args")
+        print("whats-new - Print new changes to zpkg")
         print("add <manifest.json> - Add a package to the database")
         print("remove <pkg> <secret> - Remove a package from the database")
         print("list - List packages in database")
+        print("list-local - List installed packages")
         print("update - Download the newest database")
-        print("upgrade <pkg-name> - Download the newest version of the package")
+        print("upgrade - Download the newest version of all packages")
         print("self-update - Download the newest version of zpkg")
         print("install <package> - Install a package")
         print("uninstall <package> - Remove a package")
@@ -275,8 +286,12 @@ def main():
         print(VERSION)
     elif command == "list":
         listPackages()
+    elif command == "whats-new":
+        whatsNew()
     elif command == "self-update":
         self_update()
+    elif command == "list-local":
+        listLocal()
     elif command == "remove":
         removeRemote(sys.argv[2], sys.argv[3])
     elif command == "add":
@@ -285,11 +300,7 @@ def main():
             return
         addPackageFromManifest(sys.argv[2])
     elif command == "upgrade":
-        if len(sys.argv) < 3:
-            print(f"[{RED}error{RESET}] Usage: zpkg upgrade <package>")
-            return
-        upgradePackage(sys.argv[2])
-
+        upgradePackages()
     elif command == "install":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg install <package>")
