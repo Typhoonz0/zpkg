@@ -9,6 +9,7 @@ import shutil
 import random
 import string
 import hashlib
+import re 
 
 if os.name != "nt":
     RED = "\033[31m"
@@ -31,7 +32,7 @@ PKG_DIR = os.path.join(SCRDIR, "packages")
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.6"
+VERSION = "0.6.5"
 
 def ping():
     pass
@@ -184,6 +185,16 @@ def cloneRepo(gitUrl, destDir):
     print(f"[{BLUE}notice{RESET}] Cloning {gitUrl} into {destDir}...")
     subprocess.run(["git", "clone", gitUrl, destDir], check=True)
 
+def getRepoSize(url):
+    match = re.match(r"https?://github\.com/([^/]+)/([^/]+?)(\.git)?$", url)
+    if not match:
+        return None
+    owner, repo = match.group(1), match.group(2)
+    resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}")
+    if resp.status_code == 200:
+        return round(resp.json().get("size", 0), 2)
+    return None
+
 def installPackage(pkgName, db, installed):
     if pkgName in installed:
         return
@@ -193,9 +204,9 @@ def installPackage(pkgName, db, installed):
 
     info = db[pkgName]
     print(info)
-
-    if input("Install package? [Y/n] ").lower() not in ["", " ", "y", "yes", "nigger"]:
-        return
+    print(f"Total download size: {getRepoSize(info["url"])} KB")
+    if input(f"Install {pkgName}? [Y/n] ").lower() not in ["", " ", "y", "yes"]:
+        sys.exit()
 
     for dep in info.get("deps", []):
         installPackage(dep, db, installed)
@@ -221,8 +232,6 @@ def installPackage(pkgName, db, installed):
             except Exception as e:
                 print(f"[{RED}error{RESET}] pip install failed: {e}")
                 sys.exit(1)
-
-
 
     for cmd in info.get("other", []):
         print(f"[{BLUE}notice{RESET}] Running: {cmd}")
@@ -293,15 +302,29 @@ def addPackageFromManifest(path):
             print(f"[{RED}error{RESET}] Error adding package: {response.text}")
     except Exception as e:
         print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+import os
+
+def getsize(path):
+    total = 0
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            fp = os.path.join(root, f)
+            if os.path.isfile(fp):
+                size = os.path.getsize(fp)
+                total += size
+                # print(fp, size)
+    return total / 1000
 
 def removePackage(pkgName):
     pkgPath = os.path.join(PKG_DIR, pkgName)
     if os.path.exists(pkgPath):
-        print(f"[{BLUE}notice{RESET}] Removing package from local filesystem: {pkgPath}")
-        shutil.rmtree(pkgPath)
+        print(f"Total installed size: {getsize(pkgPath)} KB")
+        if input(f"Uninstall {pkgName}? [y/N] ").lower() in ["y", "yes"]: 
+            print(f"[{BLUE}notice{RESET}] Removing package: {pkgPath}")
+            shutil.rmtree(pkgPath)
+            print(f"[{GREEN}success{RESET}] Removed {pkgPath}.")
     else:
         print(f"[{RED}error{RESET}] Package '{pkgName}' not found locally.")
-import hashlib
 
 def hash_secret(secret):
     return hashlib.sha256(secret.encode('utf-8')).hexdigest()
@@ -379,7 +402,8 @@ query - See package details in database
 query-local - See package details of installed packages
 
 [{BLUE}Changed{RESET}]:
-upgrade - Upgrades all packages at once""")
+upgrade - Upgrades all packages at once
+confirmation when installing and uninstalling packages""")
 
 def zpkgHelp():
     print(f"[{GREEN}zpkg{RESET}] ez package manager")
@@ -465,8 +489,8 @@ def main():
         print(VERSION)
     elif command == "help": 
         zpkgHelp()
-    else:
-        print(f"[{RED}error{RESET}] Unknown command: {command}. Type zpkg help for a list of commands.")
+    # else:
+    #     print(f"[{RED}error{RESET}] Unknown command: {command}. Type zpkg help for a list of commands.")
 
 if __name__ == "__main__":
     main()
