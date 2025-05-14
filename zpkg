@@ -10,6 +10,7 @@ import random
 import string
 import hashlib
 import re 
+import datetime
 
 if os.name != "nt":
     RED = "\033[31m"
@@ -28,11 +29,12 @@ except ImportError:
 SCRDIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
+LOG_FILE = os.path.join(SCRDIR, "update_log.json")
 
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.6.6"
+VERSION = "0.6.7"
 
 def ping():
     pass
@@ -155,7 +157,31 @@ def downloadFile(url, dest):
     urllib.request.urlretrieve(url, dest)
     print(f"[{GREEN}success{RESET}] Saved to {dest}")
 
+def get_update_log():
+    
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {"date": "", "count": 0}
+    return {"date": "", "count": 0}
+
+def save_update_log(log):
+    with open(LOG_FILE, "w") as f:
+        json.dump(log, f)
+
 def updateDatabase():
+    today = datetime.date.today().isoformat()
+    log = get_update_log()
+
+    if log["date"] != today:
+        log = {"date": today, "count": 0}
+
+    if log["count"] >= 5:
+        print(f"[{RED}error{RESET}] Daily API limit reached ({5} per day).")
+        return
+
     print(f"[{BLUE}notice{RESET}] Fetching latest package database...")
     try:
         with urllib.request.urlopen(DB_URL) as response:
@@ -163,12 +189,14 @@ def updateDatabase():
             if data != "{}":
                 with open(DB_FILE, "w") as f:
                     f.write(data)
-                print(f"[{GREEN}success{RESET}] Database is up to date.")
+                log["count"] += 1
+                save_update_log(log)
+                remaining = 5 - log["count"]
+                print(f"[{GREEN}success{RESET}] Database is up to date. ({remaining} API calls left today)")
             else:
-                print(f"[{RED}error{RESET}] The database was empty, using current database.")
-        
+                print(f"[{RED}error{RESET}] The database was empty, using current database. ({remaining} API calls left today)")
     except Exception as e:
-        print(f"[{RED}error{RESET}] Failed to update database: {e}")
+        print(f"[{RED}error{RESET}] Failed to update database: {e} ({remaining} API calls left today)")
         sys.exit(1)
 
 def loadDatabase():
@@ -204,7 +232,7 @@ def installPackage(pkgName, db, installed, confirm):
 
     info = db[pkgName]
     print(info)
-    print(f"Total download size: {getRepoSize(info['url'])} KB")
+    print(f"Total download size: {getRepoSize(info["url"])} KB")
     if confirm:
         if input(f"Install {pkgName}? [Y/n] ").lower() not in ["", " ", "y", "yes"]:
             sys.exit()
@@ -247,7 +275,7 @@ def upgradePackages():
 
     for pkgName, info in db.items():
         current_sha = installed_commits.get(pkgName)
-        latest_sha = get_latest_commit_sha(info['url'])
+        latest_sha = get_latest_commit_sha(info["url"])
 
         if not latest_sha:
             print(f"[{RED}error{RESET}] Could not retrieve latest commit for {pkgName}.")
@@ -269,6 +297,16 @@ def hash_secret(secret):
     return hashlib.sha256(secret.encode('utf-8')).hexdigest()
 
 def addPackageFromManifest(path):
+    today = datetime.date.today().isoformat()
+    log = get_update_log()
+
+    if log["date"] != today:
+        log = {"date": today, "count": 0}
+
+    if log["count"] >= 5:
+        print(f"[{RED}error{RESET}] Daily API limit reached ({5} per day).")
+        return
+    
     if not os.path.exists(path):
         print(f"[{RED}error{RESET}] Manifest file {path} not found.")
         sys.exit(1)
@@ -296,13 +334,16 @@ def addPackageFromManifest(path):
 
     try:
         response = requests.post(FLASK_API_ADD, json=payload)
+        log["count"] += 1
+        save_update_log(log)
+        remaining = 5 - log["count"]
         if response.status_code == 200:
-            print(f"[{GREEN}success{RESET}] Package '{manifest['name']}' added successfully.")
+            print(f"[{GREEN}success{RESET}] Package '{manifest['name']}' added successfully. ({remaining} API calls left today)")
             
         else:
-            print(f"[{RED}error{RESET}] Error adding package: {response.text}")
+            print(f"[{RED}error{RESET}] Error adding package: {response.text} ({remaining} API calls left today)")
     except Exception as e:
-        print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+        print(f"[{RED}error{RESET}] Failed to contact server: {e} ({remaining} API calls left today)")
 import os
 
 def getsize(path):
@@ -331,6 +372,16 @@ def hash_secret(secret):
     return hashlib.sha256(secret.encode('utf-8')).hexdigest()
 
 def removeRemote(pkgName, secret):
+    today = datetime.date.today().isoformat()
+    log = get_update_log()
+
+    if log["date"] != today:
+        log = {"date": today, "count": 0}
+
+    if log["count"] >= 5:
+        print(f"[{RED}error{RESET}] Daily API limit reached ({5} per day).")
+        return
+    
     hashed_secret = hash_secret(secret)
 
     pkgPath = os.path.join(PKG_DIR, pkgName)
@@ -340,13 +391,15 @@ def removeRemote(pkgName, secret):
     try:
         payload = {"name": pkgName, "secret": hashed_secret}  
         response = requests.post(FLASK_API_REMOVE, json=payload)
-
+        log["count"] += 1
+        save_update_log(log)
+        remaining = 5 - log["count"]
         if response.status_code == 200:
-            print(f"[{GREEN}success{RESET}] Package '{pkgName}' removed from database.")
+            print(f"[{GREEN}success{RESET}] Package '{pkgName}' removed from database.  ({remaining} API calls left today) ")
         else:
-            print(f"[{RED}error{RESET}] Error removing package from database: {response.text}")
+            print(f"[{RED}error{RESET}] Error removing package from database: {response.text}  ({remaining} API calls left today)")
     except Exception as e:
-        print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+        print(f"[{RED}error{RESET}] Failed to contact server: {e}  ({remaining} API calls left today)")
 
 def self_update():
     SCRIPT_URL = "https://raw.githubusercontent.com/Typhoonz0/zpkg/main/zpkg"
