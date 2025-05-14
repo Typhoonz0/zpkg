@@ -3,5 +3,6 @@
   "url": "git-url-here",
   "deps": "zpkg-deps e.g. hello-world",
   "pypi": "python-pip-deps-if-needed e.g. flask",
-  "other": "command-to-run-in-shell e.g. sudo pacman -S cmake"
+  "other": "command-to-run-in-shell e.g. sudo pacman -S cmake",
+  "secret": "password-here-to-delete-your-package"
 }
