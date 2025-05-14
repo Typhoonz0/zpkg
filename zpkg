@@ -9,11 +9,11 @@ import shutil
 import requests
 
 SCRDIR = os.path.dirname(os.path.abspath(__file__))
-DB_URL = "https://zpkg.onrender.com/list"  
+DB_URL = "https://shadowed-stingy-blouse.glitch.me/list"  
 DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
-FLASK_API_ADD = "https://zpkg.onrender.com/add"
-# FLASK_API_REMOVE = "https://zpkg.onrender.com/remove"
+FLASK_API_ADD = "https://shadowed-stingy-blouse.glitch.me/add"
+# FLASK_API_REMOVE = "https://shadowed-stingy-blouse.glitch.me/remove"
 RED = "\033[31m"
 BLUE = "\033[36m"
 GREEN = "\033[32m"
