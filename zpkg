@@ -13,7 +13,7 @@ DB_URL = "https://zpkg.fly.dev/list"
 DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
 PKG_DIR = os.path.join(SCRDIR, "packages")
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
-# FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
+# FLASK_API_REMOVE = "https://shadowed-stingy-blouse.glitch.me/remove"
 RED = "\033[31m"
 BLUE = "\033[36m"
 GREEN = "\033[32m"
@@ -138,6 +138,28 @@ def removePackage(pkgName):
         shutil.rmtree(pkgPath)
     else:
         print(f"[{RED}error{RESET}] Package '{pkgName}' not found locally.")
+
+def removeRemote(pkgName, secret):
+    # Remove package from local file system
+    pkgPath = os.path.join(PKG_DIR, pkgName)
+    if os.path.exists(pkgPath):
+        print(f"[{BLUE}notice{RESET}] Removing package from local filesystem: {pkgPath}")
+        shutil.rmtree(pkgPath)
+    else:
+        print(f"[{RED}error{RESET}] Package '{pkgName}' not found locally.")
+
+    # Remove package from the database via the server
+    try:
+        payload = {"name": pkgName, "secret": secret}
+        response = requests.post(FLASK_API_REMOVE, json=payload)
+
+        if response.status_code == 200:
+            print(f"[{GREEN}success{RESET}] Package '{pkgName}' removed from database.")
+        else:
+            print(f"[{RED}error{RESET}] Error removing package from database: {response.text}")
+    except Exception as e:
+        print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+
 
 def main():
     if len(sys.argv) < 2:
