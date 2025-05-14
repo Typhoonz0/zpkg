@@ -17,7 +17,7 @@ PKG_DIR = os.path.join(SCRDIR, "packages")
 DB_URL = "https://zpkg.fly.dev/list"  
 FLASK_API_ADD = "https://zpkg.fly.dev/add"
 FLASK_API_REMOVE = "https://zpkg.fly.dev/remove"
-VERSION = "0.5.2"
+VERSION = "0.5.3"
 
 RED = "\033[31m"
 BLUE = "\033[36m"
