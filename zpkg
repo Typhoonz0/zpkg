@@ -80,6 +80,9 @@ def installPackage(pkgName, db, installed):
     os.makedirs(PKG_DIR, exist_ok=True)
     destPath = os.path.join(PKG_DIR, pkgName)
     cloneRepo(info["url"], destPath)
+    sha = get_latest_commit_sha(info["url"])
+    if sha:
+        save_installed_commit(pkgName, sha)
 
     if info.get("pypi"):
         pypiDeps = info["pypi"]
@@ -104,6 +107,30 @@ def installPackage(pkgName, db, installed):
 
     installed.add(pkgName)
     print(f"[{GREEN}success{RESET}] Installed {pkgName} at {SCRDIR}/packages/{pkgName}.")
+
+def upgradePackage(pkgName):
+    db = loadDatabase()
+    if pkgName not in db:
+        print(f"[{RED}error{RESET}] Package '{pkgName}' not found in database.")
+        return
+
+    info = db[pkgName]
+    installed_commits = load_installed_commits()
+    current_sha = installed_commits.get(pkgName)
+    latest_sha = get_latest_commit_sha(info["url"])
+
+    if not latest_sha:
+        print(f"[{RED}error{RESET}] Could not retrieve latest commit.")
+        return
+
+    if current_sha == latest_sha:
+        print(f"[{BLUE}notice{RESET}] {pkgName} is already up to date.")
+        return
+
+    print(f"[{BLUE}notice{RESET}] Upgrading {pkgName}...")
+    removePackage(pkgName)
+    installPackage(pkgName, db, set())
+
 
 def generate_secret(length=16):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
@@ -191,6 +218,38 @@ def self_update():
     except Exception as e:
         print(f"[{RED}error{RESET}] Failed to update script: {e}")
 
+def get_latest_commit_sha(repo_url):
+    if not repo_url.endswith(".git"):
+        print(f"[{RED}error{RESET}] Invalid GitHub URL: {repo_url}")
+        return None
+    parts = repo_url[:-4].split("/")
+    if len(parts) < 2:
+        return None
+    user, repo = parts[-2], parts[-1]
+    api_url = f"https://api.github.com/repos/{user}/{repo}/commits/main"
+
+    try:
+        res = requests.get(api_url)
+        if res.status_code == 200:
+            return res.json()["sha"]
+    except Exception as e:
+        print(f"[{RED}error{RESET}] Failed to fetch commit: {e}")
+    return None
+
+COMMIT_TRACKER = os.path.join(SCRDIR, ".pkg-commits.json")
+
+def load_installed_commits():
+    if os.path.exists(COMMIT_TRACKER):
+        with open(COMMIT_TRACKER, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_installed_commit(pkg, sha):
+    commits = load_installed_commits()
+    commits[pkg] = sha
+    with open(COMMIT_TRACKER, "w") as f:
+        json.dump(commits, f)
+
 
 def main():
     if len(sys.argv) < 2:
@@ -203,6 +262,7 @@ def main():
         print("self-update - Download the newest version of zpkg")
         print("install <package> - Install a package")
         print("uninstall <package> - Remove a package")
+        print("version - Returns the version of zpkg")
         sys.exit()
 
     command = sys.argv[1]
@@ -222,7 +282,12 @@ def main():
             print(f"[{RED}error{RESET}] Usage: zpkg add <manifest.json>")
             return
         addPackageFromManifest(sys.argv[2])
-        
+    elif command == "upgrade":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg upgrade <package>")
+            return
+        upgradePackage(sys.argv[2])
+
     elif command == "install":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg install <package>")
