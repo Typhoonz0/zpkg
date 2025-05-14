@@ -1,3 +1,105 @@
+#!/usr/bin/python3
+
+import sys
+import json
+import os
+import urllib.request
+import subprocess
+import shutil
+import requests
+
+SCRDIR = os.path.dirname(os.path.abspath(__file__))
+DB_URL = "https://zpkg.fly.dev/list"  
+DB_FILE = os.path.join(SCRDIR, "pkgdb.json")
+PKG_DIR = os.path.join(SCRDIR, "packages")
+FLASK_API_ADD = "https://zpkg.fly.dev/add"
+# FLASK_API_REMOVE = "https://shadowed-stingy-blouse.glitch.me/remove"
+RED = "\033[31m"
+BLUE = "\033[36m"
+GREEN = "\033[32m"
+RESET = "\033[0m"
+
+def listPackages():
+    db = loadDatabase()
+    if not db:
+        print(f"[{RED}error{RESET}] No packages found in the database.")
+        return
+
+    print(f"[{BLUE}notice{RESET}] Available packages:")
+    for name, info in db.items():
+        print(f"- {name}: {info.get('url', 'No URL')}")
+
+
+def downloadFile(url, dest):
+    print(f"[{BLUE}notice{RESET}] Downloading {url}...")
+    urllib.request.urlretrieve(url, dest)
+    print(f"[{GREEN}success{RESET}] Saved to {dest}")
+
+def updateDatabase():
+    print(f"[{BLUE}notice{RESET}] Fetching latest package database...")
+    try:
+        with urllib.request.urlopen(DB_URL) as response:
+            data = response.read().decode("utf-8")
+            with open(DB_FILE, "w") as f:
+                f.write(data)
+        print(f"[{GREEN}success{RESET}] Database is up to date.")
+    except Exception as e:
+        print(f"[{RED}error{RESET}] Failed to update database: {e}")
+        sys.exit(1)
+
+def loadDatabase():
+    if not os.path.exists(DB_FILE):
+        print(f"[{RED}error{RESET}] Database not found. Run `update` first.")
+        sys.exit(1)
+    with open(DB_FILE, "r") as f:
+        return json.load(f)
+
+def cloneRepo(gitUrl, destDir):
+    if os.path.exists(destDir):
+        print(f"[{BLUE}notice{RESET}] {destDir} already exists, skipping clone.")
+        return
+    print(f"[{BLUE}notice{RESET}] Cloning {gitUrl} into {destDir}...")
+    subprocess.run(["git", "clone", gitUrl, destDir], check=True)
+
+def installPackage(pkgName, db, installed):
+    if pkgName in installed:
+        return
+    if pkgName not in db:
+        print(f"[{RED}error{RESET}]Package '{pkgName}' not found in database.")
+        sys.exit(1)
+
+    info = db[pkgName]
+
+    for dep in info.get("deps", []):
+        installPackage(dep, db, installed)
+
+    os.makedirs(PKG_DIR, exist_ok=True)
+    destPath = os.path.join(PKG_DIR, pkgName)
+    cloneRepo(info["url"], destPath)
+
+    if info.get("pypi"):
+        pypiDeps = info["pypi"]
+        if isinstance(pypiDeps, str):
+            pypiDeps = pypiDeps.split()
+
+        print(f"[{BLUE}notice{RESET}] Installing PyPI dependencies for {pkgName}...")
+        try:
+            subprocess.run(["pip", "install"] + pypiDeps, check=True)
+        except FileNotFoundError:
+            try:
+                subprocess.run(["python3", "-m", "pip", "install"] + pypiDeps, check=True)
+            except Exception as e:
+                print(f"[{RED}error{RESET}] pip install failed: {e}")
+                sys.exit(1)
+
+
+
+    for cmd in info.get("other", []):
+        print(f"[{BLUE}notice{RESET}] Running: {cmd}")
+        subprocess.run(cmd, shell=True, check=True)
+
+    installed.add(pkgName)
+    print(f"[{GREEN}success{RESET}] Installed {pkgName} at {SCRDIR}/packages/{pkgName}.")
 import random
 import string
 import hashlib
@@ -49,3 +151,83 @@ def addPackageFromManifest(path):
             print(f"[{RED}error{RESET}] Error adding package: {response.text}")
     except Exception as e:
         print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+
+def removePackage(pkgName):
+    # Remove package from local file system
+    pkgPath = os.path.join(PKG_DIR, pkgName)
+    if os.path.exists(pkgPath):
+        print(f"[{BLUE}notice{RESET}] Removing package from local filesystem: {pkgPath}")
+        shutil.rmtree(pkgPath)
+    else:
+        print(f"[{RED}error{RESET}] Package '{pkgName}' not found locally.")
+import hashlib
+
+def hash_secret(secret):
+    return hashlib.sha256(secret.encode('utf-8')).hexdigest()
+
+def removeRemote(pkgName, secret):
+    # Hash the secret before sending to the server
+    hashed_secret = hash_secret(secret)
+
+    # Remove package from local file system
+    pkgPath = os.path.join(PKG_DIR, pkgName)
+    if os.path.exists(pkgPath):
+        print(f"[{BLUE}notice{RESET}] Removing package from local filesystem: {pkgPath}")
+        shutil.rmtree(pkgPath)
+    else:
+        print(f"[{RED}error{RESET}] Package '{pkgName}' not found locally.")
+
+    # Remove package from the database via the server
+    try:
+        payload = {"name": pkgName, "secret": hashed_secret}  # Send the hashed secret
+        response = requests.post(FLASK_API_REMOVE, json=payload)
+
+        if response.status_code == 200:
+            print(f"[{GREEN}success{RESET}] Package '{pkgName}' removed from database.")
+        else:
+            print(f"[{RED}error{RESET}] Error removing package from database: {response.text}")
+    except Exception as e:
+        print(f"[{RED}error{RESET}] Failed to contact server: {e}")
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"[{GREEN}zpkg{RESET}] ez package manager")
+        print("<> = example mandatory args")
+        print("add <manifest.json> - Add a package to the database")
+        print("remove <pkg> <secret> - Remove a package to the database")
+        print("list - List packages in database")
+        print("update - Download the newest database")
+        print("install <package> - Install a package")
+        print("uninstall <package> - Remove a package")
+        sys.exit()
+
+    command = sys.argv[1]
+
+    if command == "update":
+        updateDatabase()
+    elif command == "list":
+        listPackages()
+    elif command == "remove":
+        removeRemote(sys.argv[2], sys.argv[3])
+    elif command == "add":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg add <manifest.json>")
+            return
+        addPackageFromManifest(sys.argv[2])
+        
+    elif command == "install":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg install <package>")
+            return
+        db = loadDatabase()
+        installPackage(sys.argv[2], db, set())
+    elif command == "uninstall":
+        if len(sys.argv) < 3:
+            print(f"[{RED}error{RESET}] Usage: zpkg uninstall <package>")
+            return
+        removePackage(sys.argv[2])
+    else:
+        print(f"[{RED}error{RESET}] Unknown command: {command}")
+
+if __name__ == "__main__":
+    main()
