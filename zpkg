@@ -443,12 +443,12 @@ def main():
     elif command == "list":
         listPackages()
     elif command == "list-local":
-        listLocal()
+        listLocalPackages()
     elif command == "query":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg query <pkg>")
             return
-        query(sys.argv[2])
+        queryPackage(sys.argv[2])
     elif command == "query-local":
         if len(sys.argv) < 3:
             print(f"[{RED}error{RESET}] Usage: zpkg query-local <pkg>")
