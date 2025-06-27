@@ -1,5 +1,5 @@
 # use ypkg instead
-https://github.com/Typhoonz0/zpkg
+https://github.com/Typhoonz0/ypkg
 
 # zpkg - ez package manager
 Install on mac/linux:
